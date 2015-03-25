@@ -63,13 +63,14 @@ def checkSQLite3(db_path):
 
 
 def cond_sql_or(table_name, l_value, glob=False):
-    """Take a table_name, a list of value and create the sql or combande"""
+    """Take a table_name, a list of value and create the sql 'or' commande
+       for example : (elt = "Na" OR elt = "Mg"')"""
 
     opr = "GLOB" if glob else "="
 
-    return [" OR ".join(['{} {} "{}"'.format(table_name,
-                                             opr,
-                                             val) for val in l_value])]
+    l_cmd = ['{} {} "{}"'.format(table_name, opr, val) for val in l_value]
+
+    return "({0})".format(" OR ".join(l_cmd))
 
 
 def string_to_nb_mo(str_type):
@@ -93,7 +94,7 @@ def string_to_nb_mo(str_type):
 # |_ |\/| (_  |    |   _   _  _. |
 # |_ |  | __) |_   |_ (_) (_ (_| |
 #
-class EMSL_local:
+class EMSL_local(object):
 
     """
     All the method for using the EMSL db localy
@@ -128,7 +129,7 @@ class EMSL_local:
         # ~#~#~#~#~#~ #
 
         if basis:
-            cmd_filter_basis = " ".join(cond_sql_or("name", basis, glob=True))
+            cmd_filter_basis = cond_sql_or("name", basis, glob=True)
         else:
             cmd_filter_basis = "(1)"
 
@@ -164,8 +165,8 @@ class EMSL_local:
             # C r e a t e _ t h e _ c m d #
             # ~#~#~#~#~#~#~#~#~#~#~#~#~#~ #
 
-            cmd_filter_basis = " ".join(cond_sql_or("basis_id", l_basis_id))
-            cmd_filter_ele = " ".join(cond_sql_or("elt", elts))
+            cmd_filter_basis = cond_sql_or("basis_id", l_basis_id)
+            cmd_filter_ele = cond_sql_or("elt", elts)
 
             column_to_fech = "name, description"
             if average_mo_number:
@@ -251,17 +252,23 @@ class EMSL_local:
                   handle_l_format=False, check_format=None):
         """
         Return the data from the basis set
+        basis_name : The value of 'name'raw from output_tab in the SQL database
+        elts : List of element avalaible in 'elt'raw
+        handle_l_format : If you want to use special treatement for SP function
+                        (see src.parser_handler.get_handle_l_function)
+        check_format : If you want to verify some condition for special program
+                       (see src.parser.check_validity)
         """
 
         # ~#~#~#~#~#~ #
         # F i l t e r #
         # ~#~#~#~#~#~ #
 
-        cmd_filter_ele = " ".join(cond_sql_or("elt", elts)) if elts else "(1)"
+        cmd_filter_ele = cond_sql_or("elt", elts) if elts else "(1)"
 
         self.c.execute('''SELECT DISTINCT data from output_tab
-                     WHERE name="{0}"
-                     AND  {1}'''.format(basis_name, cmd_filter_ele))
+                     WHERE name LIKE "{0}"
+                     AND  ({1})'''.format(basis_name, cmd_filter_ele))
 
         # We need to take i[0] because fetchall return a tuple [(value),...]
         l_atom_basis = [i[0].strip() for i in self.c.fetchall()]
@@ -281,7 +288,7 @@ class EMSL_local:
         if check_format:
 
                 from src.parser_handler import get_symmetry_function
-                from src.parser.check_validity import get_check_function
+                from src.parser_handler import get_check_function
 
                 f = get_check_function(check_format)
                 f_symmetry = get_symmetry_function(self.format)
@@ -302,16 +309,3 @@ class EMSL_local:
         # R e t u r n #
         # ~#~#~#~#~#~ #
         return l_atom_basis
-if __name__ == "__main__":
-
-    e = EMSL_local(db_path="EMSL.db")
-    l = e.get_list_basis_available()
-    for i in l:
-        print i
-
-    l = e.get_list_element_available("pc-0")
-    print l
-
-    l = e.get_basis("cc-pVTZ", ["H", "He"])
-    for i in l:
-        print i

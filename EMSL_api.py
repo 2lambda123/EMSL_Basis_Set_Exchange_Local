@@ -44,7 +44,7 @@ import os
 
 from src.misc.docopt import docopt
 from src.EMSL_dump import EMSL_dump
-from src.EMSL_local import EMSL_local, checkSQLite3
+from src.EMSL_local import EMSL_local
 
 if __name__ == '__main__':
 
@@ -63,6 +63,7 @@ if __name__ == '__main__':
     # Check the db
     try:
         if not(arguments['create_db']):
+            from src.EMSL_local import checkSQLite3
             db_path, db_path_changed = checkSQLite3(db_path)
     except:
         raise
@@ -83,10 +84,12 @@ if __name__ == '__main__':
 
         if arguments["--average_mo_number"]:
             for name, des, avg in l:
-                print "- '{}' ({}) || {:<50}".format(name, avg, des)
+                des_str = "{:<50}".format(des)
+                print "- '{0}' ({1}) || {2}".format(name, avg, des_str)
         else:
             for name, des in l:
-                print "- '{}' || {:<50}".format(name, des)
+                des_str = "{:<50}".format(des)
+                print "- '{0}' || {1}".format(name, des_str)
 
     #  _     _     _     _____ _                           _
     # | |   (_)   | |   |  ___| |                         | |
@@ -140,8 +143,7 @@ if __name__ == '__main__':
     # | |___| \__ \ |_  | || (_) | |  | | | | | | (_| | |_\__ \
     # \_____/_|___/\__| |_| \___/|_|  |_| |_| |_|\__,_|\__|___/
     elif arguments["list_formats"]:
-        e = EMSL_dump()
-        for i in e.get_list_format():
+        for i in EMSL_dump.get_list_format():
             print i
 
     #  _____                _             _ _

@@ -2,7 +2,13 @@ import os
 import sys
 import re
 import time
-import sqlite3
+
+try:
+    import sqlite3
+except ImportError:
+    print "you maybe need libsqlite3-dev from the package manager"
+    print "and the recompile Python"
+    raise
 
 from collections import OrderedDict
 
@@ -32,9 +38,8 @@ def install_with_pip(name):
 
 
 class EMSL_dump:
-
     """
-    This call implement all you need for download the EMSL and save it localy
+    This class implement all you need for download the EMSL and save it localy
     """
 
     def __init__(self, db_path=None, format="GAMESS-US", contraction="True"):
@@ -45,14 +50,16 @@ class EMSL_dump:
         self.format = check_format(format)
         self.parser = get_parser_function(self.format)
 
+        """Define the database path"""
         if db_path:
             self.db_path = db_path
         else:
             head_path = os.path.dirname(__file__)
-            self.db_path = "{0}/../db/{1}.db".format(head_path, self.format)
+            db_path = "{0}/../db/{1}.db".format(head_path, self.format)
+            self.db_path = os.path.abspath(db_path)
 
         self.contraction = str(contraction)
-        self.debug = False
+        self.debug = True
 
         try:
             import requests
@@ -62,14 +69,11 @@ class EMSL_dump:
         finally:
             self.requests = requests
 
-    def get_list_format(self):
+    @staticmethod
+    def get_list_format():
         """List all the format available in EMSL"""
         from src.parser_handler import parser_dict
         return parser_dict.keys()
-
-    def set_db_path(self, path):
-        """Define the database path"""
-        self.db_path = path
 
     def dwl_basis_list_raw(self):
         """Return the source code of the iframe
@@ -85,13 +89,9 @@ class EMSL_dump:
             dbcache = 'db/cache'
             if not os.path.isfile(dbcache):
                 page = self.requests.get(url).text
-                file = open(dbcache, 'w')
-                pickle.dump(page, file)
+                pickle.dump(page, open(dbcache, 'wb'))
             else:
-                file = open(dbcache, 'r')
-                page = pickle.load(file)
-            file.close()
-
+                page = pickle.load(open(dbcache, 'rb'))
         else:
             page = self.requests.get(url).text
 
@@ -142,6 +142,7 @@ class EMSL_dump:
 
                 name = tup[1]
                 elts = re.sub('[["\ \]]', '', tup[3]).split(',')
+
                 des = re.sub('\s+', ' ', tup[-1])
 
                 d[name] = [name, xml_path, des, elts]
@@ -155,7 +156,7 @@ class EMSL_dump:
     # | \__/\ | |  __/ (_| | ||  __/
     #  \____/_|  \___|\__,_|\__\___|
     #
-    def create_sql(self, dict_basis_list):
+    def create_and_populate_sql(self, dict_basis_list):
         """Create the sql from strach.
             Take the list of basis available data,
             download her, put her in sql"""
@@ -204,7 +205,14 @@ class EMSL_dump:
         num_worker_threads = 7
         attemps_max = 20
 
-        q_in = Queue.Queue(num_worker_threads)
+        # All the task need to be executed
+        nb_basis = len(dict_basis_list)
+        q_in = Queue.Queue(nb_basis)
+        # Populate the  q_in list
+        for [name, path_xml, des, elts] in dict_basis_list.itervalues():
+                q_in.put([name, path_xml, des, elts])
+
+        # All the queue who have been executed
         q_out = Queue.Queue(num_worker_threads)
 
         def worker():
@@ -216,7 +224,8 @@ class EMSL_dump:
                 url = "https://bse.pnl.gov:443/bse/portal/user/anon/js_peid/11535052407933/action/portlets.BasisSetAction/template/courier_content/panel/Main/"
                 url += "/eventSubmit_doDownload/true"
 
-                params = {'bsurl': path_xml, 'bsname': name,
+                params = {'bsurl': path_xml,
+                          'bsname': name,
                           'elts': " ".join(elts),
                           'format': self.format,
                           'minimize': self.contraction}
@@ -239,26 +248,15 @@ class EMSL_dump:
                     if self.debug:
                         print "Fail on q_out.put", basis_data
                     raise
-                else:
-                    q_in.task_done()
 
-        def enqueue():
-            for [name, path_xml, des, elts] in dict_basis_list.itervalues():
-                q_in.put([name, path_xml, des, elts])
-
-            return 0
-
-        t = threading.Thread(target=enqueue)
-        t.daemon = True
-        t.start()
-
+        # Create all the worker (q_in |> worker |> q_out)
         for i in range(num_worker_threads):
             t = threading.Thread(target=worker)
             t.daemon = True
             t.start()
 
-        nb_basis = len(dict_basis_list)
-
+        # Take the result from the out queue (populate by the worker)
+        # and put in in the SQL database
         for i in range(nb_basis):
             name, des, basis_data = q_out.get()
             q_out.task_done()
@@ -300,4 +298,4 @@ class EMSL_dump:
         _data = self.dwl_basis_list_raw()
         array_basis = self.basis_list_raw_to_array(_data)
 
-        self.create_sql(array_basis)
+        self.create_and_populate_sql(array_basis)
