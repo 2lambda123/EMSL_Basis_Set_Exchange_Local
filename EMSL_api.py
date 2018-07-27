@@ -58,10 +58,10 @@ if __name__ == '__main__':
         db_path = arguments["--db_path"]
         db_dump_path = None
     elif arguments["--db_dump_path"]:
-    	db_path = None
-    	db_dump_path = arguments["--db_dump_path"]
+        db_path = None
+        db_dump_path = arguments["--db_dump_path"]
     else:
-    	db_dump_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+        db_dump_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                                "db/GAMESS-US.dump")
         db_path = None
 #        db_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
